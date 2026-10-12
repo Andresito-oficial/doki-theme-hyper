@@ -100,6 +100,10 @@ const shouldDownloadNewAsset = async (
   remoteAssetUrl: string,
   localStickerPath: string
 ): Promise<boolean> => {
+      // ── PATCH: si existe local, no descargar ──
+    if (fs.existsSync(localStickerPath)) {
+      return false;
+    }
   try {
     const remoteChecksum = await fetchRemoteChecksum(remoteAssetUrl);
     const localChecksum = await fetchLocalChecksum(localStickerPath);
