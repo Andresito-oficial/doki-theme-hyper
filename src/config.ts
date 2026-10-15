@@ -14,10 +14,10 @@ import vm from "vm";
 
 const applicationDirectory =
   process.env.XDG_CONFIG_HOME !== undefined
-    ? path.join(process.env.XDG_CONFIG_HOME, "hyper")
+    ? path.join(process.env.XDG_CONFIG_HOME, "Hyper")
     : process.platform == "win32"
     ? path.join(process.env.APPDATA || "", "Hyper")
-    : os.homedir();
+    : path.join(os.homedir(), ".config", "Hyper");
 
 
 export const configDirectory = path.resolve(

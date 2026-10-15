@@ -1,6 +1,6 @@
 import { AnyAction } from "redux";
 import {SET_STICKER_TYPE, SET_THEME, SYSTEM_THEME_CHANGED, TOGGLE_STICKER, TOGGLE_WALLPAPER} from "./settings";
-import {DokiSticker, DokiTheme, StringDictonary} from "./themeTools";
+import {DokiSticker, DokiTheme, StickerType, StringDictonary} from "./themeTools";
 import {DEFAULT_THEME_ID, extractConfig, extractHyperConfig, getCorrectSticker, getTheme, saveConfig} from "./config";
 import DokiThemeDefinitions from "./DokiThemeDefinitions";
 import {CONFIG_RELOAD} from "./decorator";
@@ -38,15 +38,15 @@ function applySystemState(state: any) {
     const activeThemeDef = themeNameToDefinition[themeKey] || themeNameToDefinition[
       DokiThemeDefinitions[DEFAULT_THEME_ID].information.name
       ];
-    const themeState: ThemeState = {
+      const themeState: ThemeState = {
       ...previousState,
       activeTheme: activeThemeDef
-    };
-    saveConfig({
+      };
+      saveConfig({
       ...extractConfig(),
       themeId: activeThemeDef.information.id,
-    });
-    return state.set(THEME_STATE, themeState);
+      });
+      return state.set(THEME_STATE, themeState);
   } else {
     return state;
   }

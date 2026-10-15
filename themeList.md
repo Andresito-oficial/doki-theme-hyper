@@ -21,6 +21,7 @@ All Themes
 - Senko
 - Shigure
 - Tohru
+- Tokisaki Kurumi
 - Tomori Nao
 - Yuri Light
 - Yuzuriha Inori
@@ -86,6 +87,7 @@ All Themes
 - Sonoda Umi
 - Takanashi Rikka
 - Tohsaka Rin
+- Tokisaki Kurumi Dark
 - Vanilla
 - Yukihira Soma
 - Yukinoshita Yukino

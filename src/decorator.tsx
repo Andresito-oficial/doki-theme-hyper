@@ -12,6 +12,12 @@ import {
 import path from "path";
 import {attemptToUpdateSticker, resolveLocalStickerPath} from "./StickerUpdateService";
 import {ipcRenderer} from "electron";
+import fs from "fs";
+
+// ───────────────────────────────────────────────────────────────
+// Archivo de estado de Konsole
+// ───────────────────────────────────────────────────────────────
+const STATE_FILE = "/tmp/konsole_current_profile";
 
 const passProps = (uid: any, parentProps: any, props: any) =>
   Object.assign(props, {
@@ -75,35 +81,14 @@ const createCacheBuster = () => new Date().valueOf().toString(32);
 
 let initialized = false;
 
-const mediaQuery = "(prefers-color-scheme: dark)";
-
-/**
- * Just in case you forget, all the terminal ui changes
- * happen in the Redux Store that only lives inside the
- * Electron Window app.
- *
- * So things outside the decorator don't have access to the Redux Store.
- * Which is a pain in the ass. So stuff outside of Redux uses config files.
- *
- * Things like the settings emit events that this decorator listens to and
- * emits the corresponding events to create a new state.
- *
- * Anytime that those changes happen, I also need to reload the configuration
- * to force update all the other crap in index.ts, which causes things to
- * change.
- *
- * This code base looks stupid, because it is stupid.
- *
- * Love,
- *
- * Past Alex
- */
 export const decorateTerm = (Term: any) => {
   let cacheBuster: string = createCacheBuster();
   return class TerminalDecorator extends Component<any, StickerState> {
     state = {
       imageLoaded: false,
     };
+
+    private mediaCheckInterval: any = null;
 
     private static imageError() {
       cacheBuster = createCacheBuster();
@@ -118,24 +103,57 @@ export const decorateTerm = (Term: any) => {
       return `${localStickerPath}?time=${cacheBuster}`;
     }
 
-    private mediaChangeListener = TerminalDecorator.handleMediaChange.bind(this);
+    /**
+     * Lee el archivo de estado de Konsole y determina si es modo oscuro.
+     * Ajusta la comprobación según el contenido real del archivo.
+     */
+    public static isDark(): boolean {
+      try {
+        if (fs.existsSync(STATE_FILE)) {
+          const content = fs
+            .readFileSync(STATE_FILE, "utf8")
+            .trim()
+            .toLowerCase();
+          // Si contiene "nightmare" → oscuro
+          // Si contiene "kurumi"    → claro
+          if (content.includes("nightmare")) return true;
+          if (content.includes("kurumi")) return false;
+        }
+      } catch (e) {
+        console.error("[doki-theme-hyper] Error leyendo STATE_FILE:", e);
+      }
+      // Fallback
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
 
-    private static handleMediaChange() {
+    /*private static handleMediaChange() {
+      const isDark = TerminalDecorator.isDark();
+
+      const previousState = window.store.getState().ui[THEME_STATE];
+      const previousIsDark = previousState?.systemState === 1; // DARK = 1
+
+      if (isDark === previousIsDark && previousState?.activeTheme) return;
+
       window.store.dispatch({
         type: SYSTEM_THEME_CHANGED,
-        payload: {
-          isDark: TerminalDecorator.isDark(),
-        }
+        payload: { isDark },
       });
-      // this refreshes the entire application so
-      // the new theme gets picked up.
       window.store.dispatch(reloadConfig(window.config.getConfig()));
-    }
-
-    public static isDark() {
-      return window.matchMedia(mediaQuery).matches;
-    }
-
+    }*/
+    private static handleMediaChange() {
+			const isDark = TerminalDecorator.isDark();
+			const state = window.store.getState().ui[THEME_STATE];
+			const previousIsDark = state?.systemState === 1;
+			const expectedStickerPath = isDark ? "/dark/" : "/light/";
+			const stickerIsCorrect = state?.currentSticker?.sticker?.path?.includes(expectedStickerPath);
+			
+			if (isDark === previousIsDark && state?.activeTheme && stickerIsCorrect) return;
+			window.store.dispatch({
+				type: SYSTEM_THEME_CHANGED,
+				payload: { isDark }
+			});
+			window.store.dispatch(reloadConfig(window.config.getConfig()));
+		}
 
     componentDidMount() {
       if (!initialized) {
@@ -153,21 +171,28 @@ export const decorateTerm = (Term: any) => {
           });
         });
         window.rpc.on(TOGGLE_STICKER, () => {
-          window.store.dispatch({
-            type: TOGGLE_STICKER,
-          });
+          window.store.dispatch({ type: TOGGLE_STICKER });
         });
         window.rpc.on(TOGGLE_WALLPAPER, () => {
-          window.store.dispatch({
-            type: TOGGLE_WALLPAPER,
-          });
+          window.store.dispatch({ type: TOGGLE_WALLPAPER });
         });
-        // dispatch to initialize system state.
+
+        // Inicializar
         TerminalDecorator.handleMediaChange();
-        window
-            .matchMedia(mediaQuery)
-            .addEventListener("change", this.mediaChangeListener);
+
+        // Polling cada 2s leyendo /tmp/konsole_current_profile
+        this.mediaCheckInterval = setInterval(() => {
+          TerminalDecorator.handleMediaChange();
+        }, 2000);
+
         initialized = true;
+      }
+    }
+
+    componentWillUnmount() {
+      if (this.mediaCheckInterval) {
+        clearInterval(this.mediaCheckInterval);
+        this.mediaCheckInterval = null;
       }
     }
 
@@ -193,19 +218,13 @@ export const decorateTerm = (Term: any) => {
         cacheBuster = createCacheBuster();
       }
 
-      if(themeState.activeTheme.information.id !=
-        nextThemeState.activeTheme.information.id) {
-        // if user updates config, that causes a potential theme change
-        // eg. if system is dark and they change dark theme. The config
-        // change causes the active theme to change. When the theme
-        // changes on config reload, the CSS has already been decorated.
-        // CSS decoration is how the terminal is themed. So the terminal
-        // was decorated with the previous theme (the initial config reload
-        // triggered by the user). So dispatch a config reload again,
-        // to pick up the latest theme changes.
+      if (
+        themeState.activeTheme.information.id !==
+        nextThemeState.activeTheme.information.id
+      ) {
         window.store.dispatch(reloadConfig(window.config.getConfig()));
         attemptToUpdateSticker().then(() => {
-          window.store.dispatch(reloadConfig(window.config.getConfig()))
+          window.store.dispatch(reloadConfig(window.config.getConfig()));
         });
       }
     }
@@ -230,6 +249,7 @@ export const decorateTerm = (Term: any) => {
           >
             {themeState.showSticker ? (
               <img
+                key={themeState.currentSticker.sticker.path}
                 style={
                   this.state.imageLoaded ? imageStyle : { display: "none" }
                 }
